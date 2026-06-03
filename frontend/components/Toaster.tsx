@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import {
   CircleCheck,
@@ -16,24 +15,32 @@ function useTheme() {
   useEffect(() => {
     const html = document.documentElement;
 
-    function readTheme() {
+    function readTheme(): "light" | "dark" {
       const stored = localStorage.getItem("bigset:theme");
-      const effective =
-        stored === "dark" || stored === "light"
-          ? stored
-          : window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-      return effective as "light" | "dark";
+      if (stored === "dark" || stored === "light") return stored;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
     }
 
     setTheme(readTheme());
 
-    const observer = new MutationObserver(() => {
-      setTheme(readTheme());
+    // Watch data-theme attribute changes on <html>
+    const observer = new MutationObserver(() => setTheme(readTheme()));
+    observer.observe(html, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
     });
-    observer.observe(html, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
+
+    // Also react to OS-level dark/light preference changes
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMqChange = () => setTheme(readTheme());
+    mq.addEventListener("change", onMqChange);
+
+    return () => {
+      observer.disconnect();
+      mq.removeEventListener("change", onMqChange);  // ✅ cleanup added
+    };
   }, []);
 
   return { theme };
@@ -46,7 +53,7 @@ function BigSetToaster({ ...props }: ToasterProps) {
     <Sonner
       theme={theme}
       className="toaster group"
-      duration={1000}
+      duration={4000}  // ✅ was 1000 — too short to read
       icons={{
         success: <CircleCheck className="size-4" />,
         info: <Info className="size-4" />,

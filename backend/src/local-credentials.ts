@@ -34,10 +34,9 @@ function isPlaceholder(value: string, service: LocalCredentialService): boolean 
 }
 
 function envCredential(service: LocalCredentialService): string | undefined {
-  const value =
-    service === "tinyfish" ? process.env.TINYFISH_API_KEY : env.OPENROUTER_API_KEY;
-  if (!value || isPlaceholder(value, service)) return undefined;
-  return value;
+  if (service === "tinyfish") return process.env.TINYFISH_API_KEY;
+  if (service === "openrouter") return env.OPENROUTER_API_KEY;
+  return undefined;
 }
 
 async function localCredential(service: LocalCredentialService): Promise<{

@@ -86,4 +86,15 @@ export const env = {
     6 * 60 * 60 * 1000,
   ),
 
+  QUICKCRAWL_BASE_URL: process.env.QUICKCRAWL_BASE_URL || "https://quickcrawl-server-production.up.railway.app",
+  USE_QUICKCRAWL: process.env.USE_QUICKCRAWL === "true",
+
+  MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
+  MINIMAX_BASE_URL: process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1",
+  USE_MINIMAX: process.env.USE_MINIMAX === "true",
+
+  LANGSMITH_API_KEY: process.env.LANGSMITH_API_KEY,
+  LANGSMITH_PROJECT: process.env.LANGSMITH_PROJECT || "bigset",
+  LANGSMITH_TRACING: process.env.LANGSMITH_TRACING === "true",
+
 };

@@ -1,7 +1,9 @@
 import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { env } from "../../env.js";
 import { buildPopulateTools } from "../tools/dataset-tools.js";
 import { searchWebTool, fetchPageTool } from "../tools/web-tools.js";
+import { minimax } from "vercel-minimax-ai-provider";
 import type { AuthContext } from "../workflows/populate.js";
 import type { PopulateColumn } from "../../pipeline/populate.js";
 
@@ -54,10 +56,18 @@ export function buildRefreshAgent(
   openRouterApiKey: string,
 ): Agent {
   const modelSlug = authContext.modelConfig!.investigateSubagent;
-  const openrouter = createOpenRouter({
-    apiKey: openRouterApiKey,
-    baseURL: process.env.OPENROUTER_BASE_URL,
-  });
+
+  let model;
+  if (env.USE_MINIMAX) {
+    model = minimax(modelSlug);
+  } else {
+    const openrouter = createOpenRouter({
+      apiKey: openRouterApiKey,
+      baseURL: process.env.OPENROUTER_BASE_URL,
+    });
+    model = openrouter(modelSlug);
+  }
+
   const { update_row } = buildPopulateTools(
     authorizedDatasetId,
     authContext,
@@ -66,7 +76,7 @@ export function buildRefreshAgent(
     id: "refresh-agent",
     name: "Dataset Refresh Agent",
     instructions: buildRefreshInstructions(columns),
-    model: openrouter(modelSlug),
+    model,
     tools: {
       update_row,
       search_web: searchWebTool,

@@ -8,6 +8,8 @@ import { requireOpenRouterApiKey } from "../../local-credentials.js";
 import { RunMetrics } from "../run-metrics.js";
 import { saveRunMetrics } from "../save-run-metrics.js";
 import { getSignal } from "../../abort-registry.js";
+import { env } from "../../env.js";
+import { traceable } from "../../langsmith/client.js";
 
 export const updateInputSchema = datasetContextSchema.extend({
   authContext: authContextSchema,
@@ -100,7 +102,7 @@ const refreshRowsStep = createStep({
 
     const metrics = new RunMetrics();
     const startedAt = Date.now();
-    const openRouterApiKey = await requireOpenRouterApiKey();
+    const openRouterApiKey = env.USE_MINIMAX ? "dummy-key-for-minimax" : await requireOpenRouterApiKey();
 
     const pkColumns = columns.filter((c) => c.isPrimaryKey);
 
@@ -141,7 +143,15 @@ ${row.rowSummary ? `\nPrevious summary: ${row.rowSummary}` : ""}
 ${row.howFound ? `\nPreviously found via: ${row.howFound}` : ""}`;
 
         const abortSignal = getSignal(datasetId);
-        const result = await agent.generate(prompt, { abortSignal, maxSteps: 10 });
+
+        const tracedGenerate = traceable(
+          async (p: string) => {
+            return await agent.generate(p, { abortSignal, maxSteps: 10 });
+          },
+          { name: "refresh-agent-generate", run_type: "chain" }
+        );
+
+        const result = await tracedGenerate(prompt);
 
         // Accumulate token usage into the investigate tier (refresh agents map
         // to the investigate tier so the runStats schema needs no new columns).

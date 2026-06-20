@@ -2,6 +2,7 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { generateText } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { minimax } from "vercel-minimax-ai-provider";
 import { datasetContextSchema, populateColumnSchema } from "../../pipeline/populate.js";
 import { convex, internal } from "../../convex.js";
 import { DEFAULT_MODEL_IDS } from "../../config/models.js";
@@ -10,6 +11,8 @@ import { buildPopulateAgent } from "../agents/populate.js";
 import { RunMetrics } from "../run-metrics.js";
 import { saveRunMetrics } from "../save-run-metrics.js";
 import { getSignal } from "../../abort-registry.js";
+import { env } from "../../env.js";
+import { traceable } from "../../langsmith/client.js";
 
 /**
  * Server-set auth/run context threaded through every step.
@@ -109,15 +112,21 @@ Respond with EXACTLY one word: scraper or search`;
 
     let classification: "scraper" | "search" = "search";
     try {
-      const apiKey = await requireOpenRouterApiKey();
-      const openrouter = createOpenRouter({
-        apiKey,
-        baseURL: process.env.OPENROUTER_BASE_URL,
-      });
       const modelSlug =
         inputData.authContext?.modelConfig?.schemaInference ?? DEFAULT_MODEL_IDS.SCHEMA_INFERENCE;
+      let model;
+      if (env.USE_MINIMAX) {
+        model = minimax(modelSlug);
+      } else {
+        const apiKey = await requireOpenRouterApiKey();
+        const openrouter = createOpenRouter({
+          apiKey,
+          baseURL: process.env.OPENROUTER_BASE_URL,
+        });
+        model = openrouter(modelSlug);
+      }
       const result = await generateText({
-        model: openrouter(modelSlug),
+        model,
         prompt: classificationPrompt,
         maxOutputTokens: 10,
         abortSignal: getSignal(inputData.datasetId),
@@ -251,12 +260,20 @@ const agentStep = createStep({
         inputData.authorizedDatasetId,
         inputData.authContext,
         inputData.columns,
-        await requireOpenRouterApiKey(),
+        env.USE_MINIMAX ? "dummy-key-for-minimax" : await requireOpenRouterApiKey(),
         inputData.maxRowCount,
         metrics,
       );
       const abortSignal = getSignal(inputData.authorizedDatasetId);
-      const result = await agent.generate(inputData.prompt, { abortSignal, maxSteps: 80 });
+
+      const tracedGenerate = traceable(
+        async (prompt: string) => {
+          return await agent.generate(prompt, { abortSignal, maxSteps: 80 });
+        },
+        { name: "populate-agent-generate", run_type: "chain" }
+      );
+
+      const result = await tracedGenerate(inputData.prompt);
       metrics.addOrchestratorResult(result);
       // Use result.toolCalls (flat accumulated list) — same reasoning as investigate-tool.ts.
       metrics.countToolCalls(result.toolCalls ?? []);

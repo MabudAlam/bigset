@@ -6,6 +6,7 @@ import type { AuthContext } from "../workflows/populate.js";
 import type { PopulateColumn } from "../../pipeline/populate.js";
 import type { RunMetrics } from "../run-metrics.js";
 import { getSignal } from "../../abort-registry.js";
+import { traceable } from "../../langsmith/client.js";
 
 const investigateInputSchema = z.object({
   entity_hint: z
@@ -131,7 +132,15 @@ Context (partial data already found):
 ${context}${urlsBlock}${notesBlock}`;
 
         const abortSignal = getSignal(authorizedDatasetId);
-        const result = await agent.generate(prompt, { abortSignal, maxSteps: 25 });
+
+        const tracedGenerate = traceable(
+          async (p: string) => {
+            return await agent.generate(p, { abortSignal, maxSteps: 25 });
+          },
+          { name: "investigate-agent-generate", run_type: "chain" }
+        );
+
+        const result = await tracedGenerate(prompt);
         if (metrics) {
           // Use result.toolCalls (the flat accumulated list across all steps) rather
           // than iterating result.steps[n].toolCalls. The per-step arrays are snapshots

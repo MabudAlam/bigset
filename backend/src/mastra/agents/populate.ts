@@ -1,7 +1,9 @@
 import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { env } from "../../env.js";
 import { buildSubagentTool } from "../tools/investigate-tool.js";
 import { searchWebTool, fetchPageTool } from "../tools/web-tools.js";
+import { minimax } from "vercel-minimax-ai-provider";
 import type { AuthContext } from "../workflows/populate.js";
 import type { PopulateColumn } from "../../pipeline/populate.js";
 import type { RunMetrics } from "../run-metrics.js";
@@ -45,16 +47,23 @@ export function buildPopulateAgent(
   metrics?: RunMetrics,
 ): Agent {
   const modelSlug = authContext.modelConfig!.populateOrchestrator;
-  const openrouter = createOpenRouter({
-    apiKey: openRouterApiKey,
-    baseURL: process.env.OPENROUTER_BASE_URL,
-  });
+
+  let model;
+  if (env.USE_MINIMAX) {
+    model = minimax(modelSlug);
+  } else {
+    const openrouter = createOpenRouter({
+      apiKey: openRouterApiKey,
+      baseURL: process.env.OPENROUTER_BASE_URL,
+    });
+    model = openrouter(modelSlug);
+  }
 
   return new Agent({
     id: "populate-agent",
     name: "Dataset Populate Orchestrator",
     instructions: buildInstructions(maxRowCount),
-    model: openrouter(modelSlug),
+    model,
     tools: {
       search_web: searchWebTool,
       fetch_page: fetchPageTool,
